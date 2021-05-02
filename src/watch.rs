@@ -132,7 +132,15 @@ impl<W: Watcher> ZkWatch<W> {
     fn cut_chroot(&self, event: &mut WatchedEvent) {
         if let Some(ref chroot) = self.chroot {
             if event.path.is_some() {
-                event.path = Some(event.path.as_ref().unwrap()[chroot.len()..].to_owned());
+                let mut path_without_chroot =
+                    event.path.as_ref().unwrap()[chroot.len()..].to_owned();
+                if path_without_chroot == "" {
+                    // When there's a watch registered to the chroot itself, the above string split
+                    // would return "". However, the `self.watches` HashMap expects the key to be
+                    // "/"
+                    path_without_chroot = "/".to_owned();
+                }
+                event.path = Some(path_without_chroot);
             }
         }
     }
