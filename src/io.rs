@@ -32,6 +32,9 @@ lazy_static! {
     .unwrap();
 }
 
+const MIN_RECONNECT_DELAY: Duration = Duration::from_millis(100);
+const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(2);
+
 struct Hosts {
     addrs: Vec<SocketAddr>,
     index: usize,
@@ -68,6 +71,7 @@ pub struct ZkIo {
     ping_timeout_duration: Duration,
     conn_timeout_duration: Duration,
     retry_time_duration: Duration,
+    reconnect_delay: Duration,
     watch_sender: Sender<WatchMessage>,
     conn_resp: ConnectResponse,
     zxid: i64,
@@ -139,6 +143,7 @@ impl ZkIo {
             recv_task_jh: None,
             recv_task_tx: None,
             retry_time_duration,
+            reconnect_delay: Duration::ZERO,
         };
 
         zkio.reconnect().await;
@@ -241,6 +246,7 @@ impl ZkIo {
                 self.state = ZkState::NotConnected;
             } else {
                 self.conn_resp = conn_resp;
+                self.reconnect_delay = Duration::ZERO;
                 info!("Connected: {:?}", self.conn_resp);
                 self.timeout_ms = self.conn_resp.timeout;
                 self.ping_timeout_duration = Duration::from_millis(self.conn_resp.timeout / 3 * 2);
@@ -349,6 +355,16 @@ impl ZkIo {
                 if let Some(h) = self.recv_task_jh.take() {
                     h.await.ok();
                 }
+
+                // Wait before each attempt after the first that didn't get a session, so a server
+                // that accepts and closes every connection isn't hit in a tight loop. The timeouts
+                // and the previous connection's read task are stopped first, so they can't act on
+                // the next connection.
+                if !self.reconnect_delay.is_zero() {
+                    sleep(self.reconnect_delay).await;
+                }
+                self.reconnect_delay =
+                    (self.reconnect_delay * 2).clamp(MIN_RECONNECT_DELAY, MAX_RECONNECT_DELAY);
 
                 let host = self.hosts.get();
                 info!("Connecting to new server {:?}", host);
