@@ -163,7 +163,7 @@ pub struct ConnectRequest {
 impl ConnectRequest {
     pub fn from(conn_resp: &ConnectResponse, last_zxid_seen: i64) -> ConnectRequest {
         ConnectRequest {
-            protocol_version: conn_resp.protocol_version,
+            protocol_version: 0,
             last_zxid_seen,
             timeout: conn_resp.timeout as i32,
             session_id: conn_resp.session_id,
@@ -187,7 +187,7 @@ impl WriteTo for ConnectRequest {
 
 #[derive(Debug)]
 pub struct ConnectResponse {
-    protocol_version: i32,
+    pub protocol_version: i32,
     pub timeout: u64, // is handled as i32
     pub session_id: i64,
     passwd: Vec<u8>,
