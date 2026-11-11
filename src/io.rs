@@ -239,6 +239,11 @@ impl ZkIo {
                 info!("session {} expired", self.conn_resp.session_id);
                 self.conn_resp.session_id = 0;
                 self.state = ZkState::NotConnected;
+            } else if conn_resp.protocol_version != 0 || conn_resp.session_id <= 0 {
+                // ClickHouse Keeper refuses a handshake it can't serve (no quorum, still starting)
+                // with protocol version 42 and no session, then closes the connection.
+                warn!("Server refused the connection: {:?}", conn_resp);
+                return;
             } else {
                 self.conn_resp = conn_resp;
                 info!("Connected: {:?}", self.conn_resp);
